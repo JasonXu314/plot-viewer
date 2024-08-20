@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { spawn } from 'child_process';
-import { existsSync, readdirSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 
 export interface ChartResult {
 	clustering: string;
@@ -10,27 +10,32 @@ export interface ChartResult {
 @Injectable()
 export class AppService {
 	public getDatasets(): string[] {
-		return readdirSync('datasets').filter((dataset) => existsSync(`datasets/${dataset}/data.rds`));
+		return readdirSync('datasets').filter((dataset) => existsSync(`datasets/${dataset}/data.rds`) && existsSync(`datasets/${dataset}/genes.json`));
 	}
 
-	public async getGenes(datasets: string[]): Promise<string[]> {
-		return Promise.all(
-			datasets.map(
-				(dataset) =>
-					new Promise<string[]>((resolve, reject) => {
-						const proc = spawn('Rscript', ['../../genes.r'], { cwd: `datasets/${dataset}` });
+	public async addDataset(file: Express.Multer.File, name: string): Promise<void> {
+		mkdirSync(`datasets/${name}`); // throws if dataset already exists
 
-						let stdout = '',
-							stderr = '';
+		writeFileSync(`datasets/${name}/data.rds`, file.buffer);
 
-						proc.stdout.on('data', (chunk) => (stdout += chunk));
-						proc.stderr.on('data', (chunk) => (stderr += chunk));
+		return new Promise<string[]>((resolve, reject) => {
+			const proc = spawn('Rscript', ['../../genes.r'], { cwd: `datasets/${name}` });
 
-						proc.on('error', () => reject(new Error(`Error reading genes of '${dataset}'`)));
-						proc.on('exit', () => resolve(stdout.split('\n').filter((ln) => ln !== '')));
-					})
-			)
-		).then((geneSets) => geneSets.slice(1).reduce((curr, next) => curr.filter((gene) => next.includes(gene)), geneSets[0]));
+			let stdout = '',
+				stderr = '';
+
+			proc.stdout.on('data', (chunk) => (stdout += chunk));
+			proc.stderr.on('data', (chunk) => (stderr += chunk));
+
+			proc.on('error', () => reject(new Error(`Error reading genes of '${name}'`)));
+			proc.on('exit', () => resolve(stdout.split('\n').filter((ln) => ln !== '')));
+		}).then((genes) => writeFileSync(`datasets/${name}/genes.json`, JSON.stringify(genes)));
+	}
+
+	public getGenes(datasets: string[]): string[] {
+		const geneSets = datasets.map<string[]>((dataset) => JSON.parse(readFileSync(`datasets/${dataset}/genes.json`).toString()));
+
+		return geneSets.slice(1).reduce((curr, next) => curr.filter((gene) => next.includes(gene)), geneSets[0]);
 	}
 
 	public async generate(datasets: string[], gene: string, groupBy: string, splitBy: string): Promise<Record<string, ChartResult>> {

@@ -10,7 +10,11 @@
 		groupBy: string = 'Genotype',
 		plots: Record<string, { clustering: string; violin: string }> | null = null,
 		ordering: string[] | null = null,
-		plotting: boolean = false;
+		plotting: boolean = false,
+		addingDataset: boolean = false,
+		newDatasets: FileList = null,
+		newDatasetName: string = '',
+		uploading: boolean = false;
 
 	$: splitBy = groupBy === 'Genotype' ? 'CellType' : 'Genotype';
 
@@ -43,6 +47,26 @@
 		}
 	}
 
+	function upload(): void {
+		if (newDatasets[0] && newDatasetName !== null) {
+			const body = new FormData();
+
+			body.append('data', newDatasets[0]);
+			body.append('name', newDatasetName);
+
+			console.log(newDatasets[0]);
+
+			// fetch('/datasets', { body, method: 'POST' }).then(() => {
+			// 	if (datasets) datasets = [...datasets, newDatasetName];
+			// 	newDatasets = new FileList();
+			// 	newDatasetName = '';
+			// 	addingDataset = false;
+			// 	uploading = false;
+			// });
+			uploading = true;
+		}
+	}
+
 	onMount(() => {
 		fetch('/datasets')
 			.then((res) => res.json())
@@ -54,6 +78,7 @@
 	<h1>Dataset Comparison</h1>
 
 	<button on:click={() => (open = true)}>Config</button>
+	<button on:click={() => (addingDataset = true)}>Upload Dataset</button>
 
 	{#if plots !== null && ordering !== null}
 		<div class="row">
@@ -128,6 +153,28 @@
 		<footer>
 			<button on:click={plot} disabled={plotting}>
 				{#if plotting}
+					<i class="fa-solid fa-spinner"></i>
+				{/if}
+				Plot
+			</button>
+		</footer>
+	</article>
+</dialog>
+<dialog open={addingDataset} on:click|self={() => (addingDataset = false)}>
+	<article>
+		<header>
+			<a href="/" class="close" on:click|preventDefault={() => (addingDataset = false)}></a>
+			<h2>Upload Dataset</h2>
+		</header>
+		<h3>RDS File</h3>
+		<input type="file" bind:files={newDatasets} />
+		<label>
+			Name
+			<input type="text" bind:value={newDatasetName} />
+		</label>
+		<footer>
+			<button on:click={upload} disabled={uploading}>
+				{#if uploading}
 					<i class="fa-solid fa-spinner"></i>
 				{/if}
 				Plot
